@@ -1,0 +1,1070 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PurchaseLog — Inventory Tracker</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0f0f11;
+    --surface: #17171a;
+    --surface2: #1e1e22;
+    --border: #2a2a30;
+    --accent: #c8f060;
+    --accent2: #60d0f0;
+    --warn: #f0a060;
+    --danger: #f06060;
+    --text: #e8e8ec;
+    --muted: #7a7a88;
+    --mono: 'DM Mono', monospace;
+    --sans: 'Syne', sans-serif;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Noise texture overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.4;
+  }
+
+  header {
+    position: relative;
+    padding: 2.5rem 2rem 2rem;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: flex-end;
+    gap: 2rem;
+    flex-wrap: wrap;
+    z-index: 1;
+  }
+
+  .logo-block {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .logo-tag {
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    color: var(--accent);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+  }
+
+  h1 {
+    font-size: clamp(1.8rem, 4vw, 2.8rem);
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    line-height: 1;
+    color: var(--text);
+  }
+
+  h1 span { color: var(--accent); }
+
+  .header-stats {
+    margin-left: auto;
+    display: flex;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+  }
+
+  .stat-chip {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.6rem 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+  }
+
+  .stat-chip .label {
+    font-family: var(--mono);
+    font-size: 0.6rem;
+    color: var(--muted);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  .stat-chip .value {
+    font-family: var(--mono);
+    font-size: 1rem;
+    font-weight: 500;
+    color: var(--accent);
+  }
+
+  main {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 2rem;
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+  }
+
+  /* ── FORM PANEL ── */
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    overflow: hidden;
+  }
+
+  .panel-header {
+    padding: 1.2rem 1.5rem;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.15s;
+  }
+
+  .panel-header:hover { background: var(--surface2); }
+
+  .panel-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--accent);
+    flex-shrink: 0;
+  }
+
+  .panel-title {
+    font-size: 0.8rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  .panel-toggle {
+    margin-left: auto;
+    font-family: var(--mono);
+    font-size: 1.2rem;
+    color: var(--muted);
+    transition: transform 0.3s;
+  }
+
+  .panel-toggle.open { transform: rotate(45deg); }
+
+  .panel-body {
+    padding: 1.5rem;
+    display: none;
+  }
+
+  .panel-body.open { display: block; }
+
+  /* ── GRID FORM ── */
+  .form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 1rem;
+  }
+
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+
+  .field.wide { grid-column: span 2; }
+
+  label {
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    color: var(--muted);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  label .required { color: var(--accent); margin-left: 2px; }
+
+  input, select, textarea {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 0.85rem;
+    padding: 0.6rem 0.8rem;
+    transition: border-color 0.15s, box-shadow 0.15s;
+    width: 100%;
+    outline: none;
+    -webkit-appearance: none;
+  }
+
+  input:focus, select:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(200,240,96,0.1);
+  }
+
+  input[readonly] {
+    color: var(--accent2);
+    cursor: default;
+    border-color: rgba(96,208,240,0.2);
+    background: rgba(96,208,240,0.05);
+  }
+
+  select option { background: var(--surface2); }
+
+  .calc-indicator {
+    font-family: var(--mono);
+    font-size: 0.6rem;
+    color: var(--accent2);
+    letter-spacing: 0.05em;
+    margin-top: 0.2rem;
+  }
+
+  .form-actions {
+    margin-top: 1.5rem;
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+
+  .btn {
+    font-family: var(--sans);
+    font-size: 0.8rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    padding: 0.65rem 1.4rem;
+    border-radius: 8px;
+    border: none;
+    cursor: pointer;
+    transition: all 0.15s;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .btn-primary {
+    background: var(--accent);
+    color: #0f0f11;
+  }
+
+  .btn-primary:hover {
+    background: #d8ff70;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 16px rgba(200,240,96,0.25);
+  }
+
+  .btn-secondary {
+    background: var(--surface2);
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+
+  .btn-secondary:hover { background: var(--border); }
+
+  .btn-export {
+    background: transparent;
+    color: var(--accent2);
+    border: 1px solid var(--accent2);
+  }
+
+  .btn-export:hover {
+    background: rgba(96,208,240,0.1);
+  }
+
+  .btn-sm {
+    font-size: 0.72rem;
+    padding: 0.4rem 0.8rem;
+    border-radius: 6px;
+  }
+
+  .btn-edit {
+    background: rgba(240,160,96,0.15);
+    color: var(--warn);
+    border: 1px solid rgba(240,160,96,0.3);
+  }
+
+  .btn-edit:hover { background: rgba(240,160,96,0.25); }
+
+  .btn-delete {
+    background: rgba(240,96,96,0.12);
+    color: var(--danger);
+    border: 1px solid rgba(240,96,96,0.25);
+  }
+
+  .btn-delete:hover { background: rgba(240,96,96,0.22); }
+
+  /* ── CONTROLS BAR ── */
+  .controls {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .search-wrap {
+    position: relative;
+    flex: 1;
+    min-width: 200px;
+  }
+
+  .search-icon {
+    position: absolute;
+    left: 0.8rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--muted);
+    font-size: 0.85rem;
+    pointer-events: none;
+  }
+
+  #searchInput {
+    padding-left: 2.2rem;
+  }
+
+  .sort-wrap {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+  }
+
+  .sort-label {
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    color: var(--muted);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  /* ── TABLE ── */
+  .table-wrap {
+    overflow-x: auto;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 900px;
+  }
+
+  thead {
+    background: var(--surface2);
+    border-bottom: 2px solid var(--border);
+  }
+
+  th {
+    font-family: var(--mono);
+    font-size: 0.62rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: 0.9rem 1rem;
+    text-align: left;
+    white-space: nowrap;
+  }
+
+  th.sortable { cursor: pointer; }
+  th.sortable:hover { color: var(--accent); }
+
+  th.num { text-align: right; }
+
+  tbody tr {
+    border-bottom: 1px solid var(--border);
+    transition: background 0.12s;
+  }
+
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: var(--surface2); }
+
+  td {
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    padding: 0.85rem 1rem;
+    color: var(--text);
+    vertical-align: middle;
+  }
+
+  td.num {
+    text-align: right;
+    color: var(--accent2);
+    font-weight: 500;
+  }
+
+  td.grand {
+    text-align: right;
+    color: var(--accent);
+    font-weight: 500;
+    font-size: 0.85rem;
+  }
+
+  td.desc {
+    max-width: 160px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .badge {
+    display: inline-block;
+    padding: 0.2rem 0.55rem;
+    border-radius: 4px;
+    font-size: 0.65rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+  }
+
+  .badge-air { background: rgba(96,208,240,0.15); color: var(--accent2); }
+  .badge-sea { background: rgba(96,240,160,0.15); color: #60f0a0; }
+  .badge-bus { background: rgba(240,200,96,0.15); color: #f0c860; }
+  .badge-logistics { background: rgba(200,96,240,0.15); color: #c860f0; }
+
+  /* cost highlights */
+  .cost-high { color: var(--danger) !important; }
+  .cost-warn { color: var(--warn) !important; }
+
+  .actions-cell { white-space: nowrap; }
+
+  /* ── EMPTY STATE ── */
+  .empty-state {
+    padding: 4rem 2rem;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .empty-icon {
+    font-size: 2.5rem;
+    filter: grayscale(1);
+    opacity: 0.4;
+  }
+
+  .empty-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--muted);
+  }
+
+  .empty-sub {
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    color: var(--border);
+  }
+
+  /* ── FOOTER TOTALS ── */
+  .totals-row td {
+    background: var(--surface2);
+    border-top: 2px solid var(--border);
+    font-weight: 600;
+    color: var(--muted);
+    font-size: 0.75rem;
+  }
+
+  .totals-row .num { color: var(--accent2); }
+  .totals-row .grand { color: var(--accent); font-size: 0.85rem; }
+
+  /* ── TOAST ── */
+  #toast {
+    position: fixed;
+    bottom: 2rem;
+    right: 2rem;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 8px;
+    padding: 0.8rem 1.2rem;
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    color: var(--text);
+    z-index: 999;
+    opacity: 0;
+    transform: translateY(10px);
+    transition: all 0.25s;
+    pointer-events: none;
+    max-width: 280px;
+  }
+
+  #toast.show {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  /* ── MODAL CONFIRM ── */
+  .overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.7);
+    backdrop-filter: blur(4px);
+    z-index: 100;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+  }
+
+  .overlay.open { display: flex; }
+
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 2rem;
+    max-width: 380px;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .modal-title {
+    font-size: 1.1rem;
+    font-weight: 700;
+  }
+
+  .modal-sub {
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+
+  .modal-actions {
+    display: flex;
+    gap: 0.75rem;
+    margin-top: 0.5rem;
+  }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 768px) {
+    header { padding: 1.5rem 1rem 1rem; gap: 1rem; }
+    main { padding: 1rem; gap: 1.5rem; }
+    .form-grid { grid-template-columns: 1fr 1fr; }
+    .field.wide { grid-column: span 2; }
+    h1 { font-size: 1.6rem; }
+    .header-stats { gap: 0.75rem; }
+    .stat-chip { padding: 0.5rem 0.75rem; }
+    .stat-chip .value { font-size: 0.85rem; }
+    .controls { flex-direction: column; align-items: stretch; }
+    .sort-wrap { justify-content: space-between; }
+  }
+
+  @media (max-width: 480px) {
+    .form-grid { grid-template-columns: 1fr; }
+    .field.wide { grid-column: span 1; }
+    .form-actions { flex-direction: column; }
+    .btn { width: 100%; justify-content: center; }
+  }
+
+  /* ── ANIMATIONS ── */
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .panel { animation: fadeIn 0.3s ease both; }
+  .panel:nth-child(2) { animation-delay: 0.05s; }
+  .panel:nth-child(3) { animation-delay: 0.1s; }
+
+  tbody tr { animation: fadeIn 0.2s ease both; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo-block">
+    <span class="logo-tag">▸ Inventory System v1.0</span>
+    <h1>Purchase<span>Log</span></h1>
+  </div>
+  <div class="header-stats">
+    <div class="stat-chip">
+      <span class="label">Total Records</span>
+      <span class="value" id="statCount">0</span>
+    </div>
+    <div class="stat-chip">
+      <span class="label">Grand Total</span>
+      <span class="value" id="statTotal">0.00</span>
+    </div>
+    <div class="stat-chip">
+      <span class="label">Avg per Record</span>
+      <span class="value" id="statAvg">0.00</span>
+    </div>
+  </div>
+</header>
+
+<main>
+
+  <!-- ADD / EDIT FORM -->
+  <div class="panel" id="formPanel">
+    <div class="panel-header" onclick="togglePanel()">
+      <div class="panel-dot"></div>
+      <span class="panel-title" id="formTitle">Add New Record</span>
+      <span class="panel-toggle open" id="panelToggle">+</span>
+    </div>
+    <div class="panel-body open" id="formBody">
+      <div class="form-grid">
+
+        <div class="field">
+          <label>Date <span class="required">*</span></label>
+          <input type="date" id="fDate">
+        </div>
+
+        <div class="field wide">
+          <label>Item Description <span class="required">*</span></label>
+          <input type="text" id="fDesc" placeholder="e.g. Laptop Stand × Black">
+        </div>
+
+        <div class="field">
+          <label>Quantity <span class="required">*</span></label>
+          <input type="number" id="fQty" min="0" step="1" placeholder="0" oninput="recalc()">
+        </div>
+
+        <div class="field">
+          <label>Exchange Rate <span class="required">*</span></label>
+          <input type="number" id="fExRate" min="0" step="0.0001" placeholder="1.0000" oninput="recalc()">
+        </div>
+
+        <div class="field">
+          <label>Unit Price (Foreign) <span class="required">*</span></label>
+          <input type="number" id="fUPForeign" min="0" step="0.01" placeholder="0.00" oninput="recalc()">
+        </div>
+
+        <div class="field">
+          <label>Unit Price (Local)</label>
+          <input type="number" id="fUPLocal" readonly placeholder="Auto">
+          <span class="calc-indicator">⟵ Foreign × Rate</span>
+        </div>
+
+        <div class="field">
+          <label>Subtotal</label>
+          <input type="number" id="fSubtotal" readonly placeholder="Auto">
+          <span class="calc-indicator">⟵ Qty × Unit (Local)</span>
+        </div>
+
+        <div class="field">
+          <label>Shipping Cost</label>
+          <input type="number" id="fShipping" min="0" step="0.01" placeholder="0.00" oninput="recalc()">
+        </div>
+
+        <div class="field">
+          <label>Miscellaneous Cost</label>
+          <input type="number" id="fMisc" min="0" step="0.01" placeholder="0.00" oninput="recalc()">
+        </div>
+
+        <div class="field">
+          <label>Grand Total</label>
+          <input type="number" id="fGrandTotal" readonly placeholder="Auto">
+          <span class="calc-indicator">⟵ Subtotal + Shipping + Misc</span>
+        </div>
+
+        <div class="field">
+          <label>Date of Arrival</label>
+          <input type="date" id="fArrival">
+        </div>
+
+        <div class="field">
+          <label>Shipping Method</label>
+          <select id="fShipMethod">
+            <option value="">— Select —</option>
+            <option value="Air">✈ Air</option>
+            <option value="Sea">🚢 Sea</option>
+            <option value="Bus">🚌 Bus</option>
+            <option value="Logistics">📦 Logistics</option>
+          </select>
+        </div>
+
+      </div>
+
+      <div class="form-actions">
+        <button class="btn btn-primary" onclick="saveRecord()">
+          <span id="btnLabel">＋ Add Record</span>
+        </button>
+        <button class="btn btn-secondary" onclick="resetForm()">↺ Clear</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CONTROLS -->
+  <div class="panel">
+    <div class="panel-body open" style="padding: 1rem 1.5rem;">
+      <div class="controls">
+        <div class="search-wrap">
+          <span class="search-icon">⌕</span>
+          <input type="text" id="searchInput" placeholder="Search by description or date…" oninput="renderTable()">
+        </div>
+        <div class="sort-wrap">
+          <span class="sort-label">Sort:</span>
+          <select id="sortSelect" onchange="renderTable()">
+            <option value="date-desc">Date ↓</option>
+            <option value="date-asc">Date ↑</option>
+            <option value="grand-desc">Grand Total ↓</option>
+            <option value="grand-asc">Grand Total ↑</option>
+            <option value="desc-asc">Description A–Z</option>
+          </select>
+        </div>
+        <button class="btn btn-export" onclick="exportCSV()">↓ Export CSV</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TABLE -->
+  <div class="panel">
+    <div class="panel-header">
+      <div class="panel-dot" style="background:var(--accent2)"></div>
+      <span class="panel-title">Records</span>
+      <span style="margin-left:auto;font-family:var(--mono);font-size:0.7rem;color:var(--muted)" id="recordCount">0 entries</span>
+    </div>
+    <div class="panel-body open" style="padding: 0;">
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th class="sortable" onclick="setSortAndRender('date-desc')">Date</th>
+              <th>Description</th>
+              <th class="num">Qty</th>
+              <th class="num">Ex.Rate</th>
+              <th class="num">UP Foreign</th>
+              <th class="num">UP Local</th>
+              <th class="num">Subtotal</th>
+              <th class="num">Shipping</th>
+              <th class="num">Misc</th>
+              <th class="num">Grand Total</th>
+              <th>Arrival</th>
+              <th>Method</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="tableBody">
+          </tbody>
+          <tfoot id="tableFooter"></tfoot>
+        </table>
+        <div id="emptyState" class="empty-state" style="display:none;">
+          <div class="empty-icon">📋</div>
+          <div class="empty-title">No records yet</div>
+          <div class="empty-sub">Add your first purchase using the form above.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<!-- DELETE CONFIRM MODAL -->
+<div class="overlay" id="deleteOverlay">
+  <div class="modal">
+    <div class="modal-title">Delete Record?</div>
+    <div class="modal-sub">This action cannot be undone. The purchase record will be permanently removed.</div>
+    <div class="modal-actions">
+      <button class="btn btn-delete" onclick="confirmDelete()">Delete</button>
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+  const STORAGE_KEY = 'purchaselog_records';
+  let records = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+  let editingId = null;
+  let deleteTargetId = null;
+
+  // ── UTILS ──
+  const $ = id => document.getElementById(id);
+  const fmt = (n, d=2) => (+n||0).toLocaleString('en-US', {minimumFractionDigits:d, maximumFractionDigits:d});
+  const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,6);
+
+  function save() {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+  }
+
+  function toast(msg, type='ok') {
+    const el = $('toast');
+    el.textContent = msg;
+    el.style.borderLeftColor = type === 'err' ? 'var(--danger)' : 'var(--accent)';
+    el.classList.add('show');
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => el.classList.remove('show'), 2800);
+  }
+
+  // ── PANEL TOGGLE ──
+  function togglePanel() {
+    const body = $('formBody');
+    const tog = $('panelToggle');
+    const open = body.classList.toggle('open');
+    tog.classList.toggle('open', open);
+  }
+
+  // ── RECALC ──
+  function recalc() {
+    const qty = +$('fQty').value || 0;
+    const exRate = +$('fExRate').value || 0;
+    const upForeign = +$('fUPForeign').value || 0;
+    const shipping = +$('fShipping').value || 0;
+    const misc = +$('fMisc').value || 0;
+
+    const upLocal = upForeign * exRate;
+    const subtotal = qty * upLocal;
+    const grandTotal = subtotal + shipping + misc;
+
+    $('fUPLocal').value = upLocal ? upLocal.toFixed(4) : '';
+    $('fSubtotal').value = subtotal ? subtotal.toFixed(2) : '';
+    $('fGrandTotal').value = grandTotal ? grandTotal.toFixed(2) : '';
+  }
+
+  // ── SAVE ──
+  function saveRecord() {
+    const date = $('fDate').value;
+    const desc = $('fDesc').value.trim();
+    const qty = +$('fQty').value;
+    const exRate = +$('fExRate').value;
+    const upForeign = +$('fUPForeign').value;
+    const shipping = +$('fShipping').value || 0;
+    const misc = +$('fMisc').value || 0;
+    const arrival = $('fArrival').value;
+    const shipMethod = $('fShipMethod').value;
+
+    if (!date) { toast('Please enter a date.', 'err'); return; }
+    if (!desc) { toast('Please enter item description.', 'err'); return; }
+    if (!qty || qty <= 0) { toast('Quantity must be greater than 0.', 'err'); return; }
+    if (!exRate || exRate <= 0) { toast('Exchange rate must be greater than 0.', 'err'); return; }
+    if (!upForeign || upForeign < 0) { toast('Unit price (foreign) is required.', 'err'); return; }
+
+    const upLocal = upForeign * exRate;
+    const subtotal = qty * upLocal;
+    const grandTotal = subtotal + shipping + misc;
+
+    const rec = { date, desc, qty, exRate, upForeign, upLocal, subtotal, shipping, misc, grandTotal, arrival, shipMethod };
+
+    if (editingId) {
+      const idx = records.findIndex(r => r.id === editingId);
+      records[idx] = { ...records[idx], ...rec };
+      editingId = null;
+      $('btnLabel').textContent = '＋ Add Record';
+      $('formTitle').textContent = 'Add New Record';
+      toast('Record updated.');
+    } else {
+      rec.id = uid();
+      records.unshift(rec);
+      toast('Record added.');
+    }
+
+    save();
+    resetForm();
+    renderTable();
+    updateStats();
+  }
+
+  // ── RESET ──
+  function resetForm() {
+    ['fDate','fDesc','fQty','fExRate','fUPForeign','fUPLocal','fSubtotal','fShipping','fMisc','fGrandTotal','fArrival'].forEach(id => $( id).value = '');
+    $('fShipMethod').value = '';
+    editingId = null;
+    $('btnLabel').textContent = '＋ Add Record';
+    $('formTitle').textContent = 'Add New Record';
+  }
+
+  // ── EDIT ──
+  function editRecord(id) {
+    const rec = records.find(r => r.id === id);
+    if (!rec) return;
+    editingId = id;
+
+    $('fDate').value = rec.date;
+    $('fDesc').value = rec.desc;
+    $('fQty').value = rec.qty;
+    $('fExRate').value = rec.exRate;
+    $('fUPForeign').value = rec.upForeign;
+    $('fShipping').value = rec.shipping;
+    $('fMisc').value = rec.misc;
+    $('fArrival').value = rec.arrival;
+    $('fShipMethod').value = rec.shipMethod;
+    recalc();
+
+    $('btnLabel').textContent = '✓ Update Record';
+    $('formTitle').textContent = 'Editing Record';
+
+    // open panel
+    const body = $('formBody');
+    const tog = $('panelToggle');
+    if (!body.classList.contains('open')) {
+      body.classList.add('open');
+      tog.classList.add('open');
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  // ── DELETE ──
+  function askDelete(id) {
+    deleteTargetId = id;
+    $('deleteOverlay').classList.add('open');
+  }
+
+  function confirmDelete() {
+    records = records.filter(r => r.id !== deleteTargetId);
+    save();
+    renderTable();
+    updateStats();
+    closeModal();
+    toast('Record deleted.');
+  }
+
+  function closeModal() {
+    $('deleteOverlay').classList.remove('open');
+    deleteTargetId = null;
+  }
+
+  // ── RENDER ──
+  function getFiltered() {
+    const q = $('searchInput').value.toLowerCase().trim();
+    let list = q ? records.filter(r => r.desc.toLowerCase().includes(q) || r.date.includes(q)) : [...records];
+
+    const sort = $('sortSelect').value;
+    if (sort === 'date-desc') list.sort((a,b) => b.date.localeCompare(a.date));
+    else if (sort === 'date-asc') list.sort((a,b) => a.date.localeCompare(b.date));
+    else if (sort === 'grand-desc') list.sort((a,b) => b.grandTotal - a.grandTotal);
+    else if (sort === 'grand-asc') list.sort((a,b) => a.grandTotal - b.grandTotal);
+    else if (sort === 'desc-asc') list.sort((a,b) => a.desc.localeCompare(b.desc));
+
+    return list;
+  }
+
+  function costClass(val, all) {
+    if (!all.length) return '';
+    const max = Math.max(...all);
+    const avg = all.reduce((a,b)=>a+b,0) / all.length;
+    if (val >= max * 0.8) return 'cost-high';
+    if (val >= avg * 1.5) return 'cost-warn';
+    return '';
+  }
+
+  function methodBadge(m) {
+    const cls = { Air:'badge-air', Sea:'badge-sea', Bus:'badge-bus', Logistics:'badge-logistics' };
+    return m ? `<span class="badge ${cls[m]||''}">${m}</span>` : '—';
+  }
+
+  function renderTable() {
+    const list = getFiltered();
+    const tbody = $('tableBody');
+    const tfoot = $('tableFooter');
+    const empty = $('emptyState');
+    $('recordCount').textContent = `${list.length} entr${list.length === 1 ? 'y':'ies'}`;
+
+    if (!list.length) {
+      tbody.innerHTML = '';
+      tfoot.innerHTML = '';
+      empty.style.display = 'flex';
+      return;
+    }
+
+    empty.style.display = 'none';
+    const allGrand = list.map(r => r.grandTotal);
+
+    tbody.innerHTML = list.map((r, i) => {
+      const gc = costClass(r.grandTotal, allGrand);
+      return `
+      <tr>
+        <td><span style="color:var(--muted);font-size:0.7rem">${i+1}</span></td>
+        <td>${r.date}</td>
+        <td class="desc" title="${r.desc}">${r.desc}</td>
+        <td class="num">${fmt(r.qty,0)}</td>
+        <td class="num">${fmt(r.exRate,4)}</td>
+        <td class="num">${fmt(r.upForeign,2)}</td>
+        <td class="num">${fmt(r.upLocal,2)}</td>
+        <td class="num">${fmt(r.subtotal,2)}</td>
+        <td class="num">${fmt(r.shipping,2)}</td>
+        <td class="num">${fmt(r.misc,2)}</td>
+        <td class="grand ${gc}">${fmt(r.grandTotal,2)}</td>
+        <td>${r.arrival || '—'}</td>
+        <td>${methodBadge(r.shipMethod)}</td>
+        <td class="actions-cell">
+          <button class="btn btn-sm btn-edit" onclick="editRecord('${r.id}')">Edit</button>
+          <button class="btn btn-sm btn-delete" onclick="askDelete('${r.id}')">Del</button>
+        </td>
+      </tr>`;
+    }).join('');
+
+    // totals row
+    const totSub = list.reduce((a,r)=>a+r.subtotal,0);
+    const totShip = list.reduce((a,r)=>a+r.shipping,0);
+    const totMisc = list.reduce((a,r)=>a+r.misc,0);
+    const totGrand = list.reduce((a,r)=>a+r.grandTotal,0);
+
+    tfoot.innerHTML = `
+    <tr class="totals-row">
+      <td colspan="7" style="padding:0.9rem 1rem;font-family:var(--mono);font-size:0.7rem;color:var(--muted);letter-spacing:.05em">TOTALS</td>
+      <td class="num">${fmt(totSub)}</td>
+      <td class="num">${fmt(totShip)}</td>
+      <td class="num">${fmt(totMisc)}</td>
+      <td class="grand">${fmt(totGrand)}</td>
+      <td colspan="3"></td>
+    </tr>`;
+  }
+
+  function updateStats() {
+    const total = records.reduce((a,r)=>a+r.grandTotal,0);
+    $('statCount').textContent = records.length;
+    $('statTotal').textContent = fmt(total);
+    $('statAvg').textContent = records.length ? fmt(total/records.length) : '0.00';
+  }
+
+  function setSortAndRender(v) {
+    $('sortSelect').value = v;
+    renderTable();
+  }
+
+  // ── EXPORT CSV ──
+  function exportCSV() {
+    const list = getFiltered();
+    if (!list.length) { toast('No records to export.', 'err'); return; }
+
+    const headers = ['Date','Description','Qty','Exchange Rate','Unit Price (Foreign)','Unit Price (Local)','Subtotal','Shipping','Misc','Grand Total','Arrival Date','Shipping Method'];
+    const rows = list.map(r => [
+      r.date, `"${r.desc.replace(/"/g,'""')}"`, r.qty, r.exRate,
+      r.upForeign, (+r.upLocal).toFixed(2), r.subtotal.toFixed(2),
+      r.shipping.toFixed(2), r.misc.toFixed(2), r.grandTotal.toFixed(2),
+      r.arrival, r.shipMethod
+    ].join(','));
+
+    const csv = [headers.join(','), ...rows].join('\n');
+    const blob = new Blob([csv], {type:'text/csv'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `purchaselog_${new Date().toISOString().slice(0,10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast(`Exported ${list.length} records.`);
+  }
+
+  // ── CLOSE MODAL ON OVERLAY CLICK ──
+  $('deleteOverlay').addEventListener('click', e => {
+    if (e.target === $('deleteOverlay')) closeModal();
+  });
+
+  // ── INIT ──
+  renderTable();
+  updateStats();
+  // Set today's date as default
+  const today = new Date().toISOString().slice(0,10);
+  $('fDate').value = today;
+</script>
+</body>
+</html>
