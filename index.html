@@ -2,7 +2,26 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="description" content="Track inventory purchases with auto-calculations, offline support, and CSV export.">
+
+<!-- PWA Meta -->
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="PurchaseLog">
+<meta name="application-name" content="PurchaseLog">
+<meta name="msapplication-TileColor" content="#0f0f11">
+<meta name="theme-color" content="#c8f060">
+
+<!-- Apple Touch Icons -->
+<link rel="apple-touch-icon" sizes="152x152" href="icons/icon-152.png">
+<link rel="apple-touch-icon" sizes="192x192" href="icons/icon-192.png">
+<link rel="apple-touch-icon" sizes="512x512" href="icons/icon-512.png">
+
+<!-- PWA Manifest -->
+<link rel="manifest" href="manifest.json">
+
 <title>PurchaseLog — Inventory Tracker</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
@@ -19,6 +38,8 @@
     --muted: #7a7a88;
     --mono: 'DM Mono', monospace;
     --sans: 'Syne', sans-serif;
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
   }
 
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -28,10 +49,13 @@
     color: var(--text);
     font-family: var(--sans);
     min-height: 100vh;
+    min-height: 100dvh;
     overflow-x: hidden;
+    padding-top: var(--safe-top);
+    padding-bottom: var(--safe-bottom);
   }
 
-  /* Noise texture overlay */
+  /* Noise texture */
   body::before {
     content: '';
     position: fixed;
@@ -42,6 +66,92 @@
     opacity: 0.4;
   }
 
+  /* ── OFFLINE / UPDATE BANNERS ── */
+  #offlineBanner {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 200;
+    background: var(--warn);
+    color: #0f0f11;
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    font-weight: 500;
+    text-align: center;
+    padding: 0.5rem 1rem;
+    letter-spacing: 0.05em;
+  }
+
+  #offlineBanner.visible { display: block; }
+
+  #updateBanner {
+    display: none;
+    position: fixed;
+    bottom: calc(1rem + var(--safe-bottom));
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 200;
+    background: var(--surface2);
+    border: 1px solid var(--accent);
+    border-radius: 12px;
+    padding: 0.75rem 1.2rem;
+    display: none;
+    align-items: center;
+    gap: 1rem;
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    color: var(--text);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+    white-space: nowrap;
+  }
+
+  #updateBanner.visible { display: flex; }
+
+  /* ── INSTALL BANNER ── */
+  #installBanner {
+    display: none;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 0.75rem 1.5rem;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+    position: relative;
+    z-index: 1;
+  }
+
+  #installBanner.visible { display: flex; }
+
+  .install-icon {
+    font-size: 1.4rem;
+    flex-shrink: 0;
+  }
+
+  .install-text {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+    min-width: 140px;
+  }
+
+  .install-text strong {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--text);
+  }
+
+  .install-text span {
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    color: var(--muted);
+  }
+
+  .install-actions { display: flex; gap: 0.5rem; flex-shrink: 0; }
+
+  /* ── HEADER ── */
   header {
     position: relative;
     padding: 2.5rem 2rem 2rem;
@@ -53,11 +163,7 @@
     z-index: 1;
   }
 
-  .logo-block {
-    display: flex;
-    flex-direction: column;
-    gap: 0.25rem;
-  }
+  .logo-block { display: flex; flex-direction: column; gap: 0.25rem; }
 
   .logo-tag {
     font-family: var(--mono);
@@ -65,6 +171,19 @@
     color: var(--accent);
     letter-spacing: 0.15em;
     text-transform: uppercase;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+
+  .pwa-badge {
+    background: rgba(200,240,96,0.15);
+    border: 1px solid rgba(200,240,96,0.3);
+    border-radius: 4px;
+    padding: 0.1rem 0.35rem;
+    font-size: 0.55rem;
+    letter-spacing: 0.08em;
+    color: var(--accent);
   }
 
   h1 {
@@ -120,13 +239,17 @@
     gap: 2rem;
   }
 
-  /* ── FORM PANEL ── */
+  /* ── PANELS ── */
   .panel {
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: 16px;
     overflow: hidden;
+    animation: fadeIn 0.3s ease both;
   }
+
+  .panel:nth-child(2) { animation-delay: 0.05s; }
+  .panel:nth-child(3) { animation-delay: 0.1s; }
 
   .panel-header {
     padding: 1.2rem 1.5rem;
@@ -166,26 +289,17 @@
 
   .panel-toggle.open { transform: rotate(45deg); }
 
-  .panel-body {
-    padding: 1.5rem;
-    display: none;
-  }
-
+  .panel-body { padding: 1.5rem; display: none; }
   .panel-body.open { display: block; }
 
-  /* ── GRID FORM ── */
+  /* ── FORM GRID ── */
   .form-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
     gap: 1rem;
   }
 
-  .field {
-    display: flex;
-    flex-direction: column;
-    gap: 0.4rem;
-  }
-
+  .field { display: flex; flex-direction: column; gap: 0.4rem; }
   .field.wide { grid-column: span 2; }
 
   label {
@@ -198,7 +312,7 @@
 
   label .required { color: var(--accent); margin-left: 2px; }
 
-  input, select, textarea {
+  input, select {
     background: var(--surface2);
     border: 1px solid var(--border);
     border-radius: 8px;
@@ -210,6 +324,8 @@
     width: 100%;
     outline: none;
     -webkit-appearance: none;
+    /* Better touch targets on mobile */
+    min-height: 42px;
   }
 
   input:focus, select:focus {
@@ -241,6 +357,7 @@
     flex-wrap: wrap;
   }
 
+  /* ── BUTTONS ── */
   .btn {
     font-family: var(--sans);
     font-size: 0.8rem;
@@ -254,119 +371,52 @@
     display: inline-flex;
     align-items: center;
     gap: 0.5rem;
+    min-height: 42px;
+    -webkit-tap-highlight-color: transparent;
   }
 
-  .btn-primary {
-    background: var(--accent);
-    color: #0f0f11;
-  }
+  .btn-primary { background: var(--accent); color: #0f0f11; }
+  .btn-primary:hover { background: #d8ff70; transform: translateY(-1px); box-shadow: 0 4px 16px rgba(200,240,96,0.25); }
+  .btn-primary:active { transform: translateY(0); }
 
-  .btn-primary:hover {
-    background: #d8ff70;
-    transform: translateY(-1px);
-    box-shadow: 0 4px 16px rgba(200,240,96,0.25);
-  }
-
-  .btn-secondary {
-    background: var(--surface2);
-    color: var(--text);
-    border: 1px solid var(--border);
-  }
-
+  .btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
   .btn-secondary:hover { background: var(--border); }
 
-  .btn-export {
-    background: transparent;
-    color: var(--accent2);
-    border: 1px solid var(--accent2);
-  }
-
-  .btn-export:hover {
-    background: rgba(96,208,240,0.1);
-  }
+  .btn-export { background: transparent; color: var(--accent2); border: 1px solid var(--accent2); }
+  .btn-export:hover { background: rgba(96,208,240,0.1); }
 
   .btn-sm {
     font-size: 0.72rem;
     padding: 0.4rem 0.8rem;
     border-radius: 6px;
+    min-height: 36px;
   }
 
-  .btn-edit {
-    background: rgba(240,160,96,0.15);
-    color: var(--warn);
-    border: 1px solid rgba(240,160,96,0.3);
-  }
-
+  .btn-edit { background: rgba(240,160,96,0.15); color: var(--warn); border: 1px solid rgba(240,160,96,0.3); }
   .btn-edit:hover { background: rgba(240,160,96,0.25); }
 
-  .btn-delete {
-    background: rgba(240,96,96,0.12);
-    color: var(--danger);
-    border: 1px solid rgba(240,96,96,0.25);
-  }
-
+  .btn-delete { background: rgba(240,96,96,0.12); color: var(--danger); border: 1px solid rgba(240,96,96,0.25); }
   .btn-delete:hover { background: rgba(240,96,96,0.22); }
 
+  .btn-install { background: var(--accent); color: #0f0f11; padding: 0.45rem 1rem; font-size: 0.75rem; min-height: 36px; }
+  .btn-dismiss { background: transparent; color: var(--muted); border: 1px solid var(--border); padding: 0.45rem 0.8rem; font-size: 0.75rem; min-height: 36px; }
+
   /* ── CONTROLS BAR ── */
-  .controls {
-    display: flex;
-    gap: 1rem;
-    flex-wrap: wrap;
-    align-items: center;
-  }
+  .controls { display: flex; gap: 1rem; flex-wrap: wrap; align-items: center; }
 
-  .search-wrap {
-    position: relative;
-    flex: 1;
-    min-width: 200px;
-  }
+  .search-wrap { position: relative; flex: 1; min-width: 200px; }
+  .search-icon { position: absolute; left: 0.8rem; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 0.85rem; pointer-events: none; }
+  #searchInput { padding-left: 2.2rem; }
 
-  .search-icon {
-    position: absolute;
-    left: 0.8rem;
-    top: 50%;
-    transform: translateY(-50%);
-    color: var(--muted);
-    font-size: 0.85rem;
-    pointer-events: none;
-  }
-
-  #searchInput {
-    padding-left: 2.2rem;
-  }
-
-  .sort-wrap {
-    display: flex;
-    gap: 0.5rem;
-    align-items: center;
-  }
-
-  .sort-label {
-    font-family: var(--mono);
-    font-size: 0.65rem;
-    color: var(--muted);
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    white-space: nowrap;
-  }
+  .sort-wrap { display: flex; gap: 0.5rem; align-items: center; }
+  .sort-label { font-family: var(--mono); font-size: 0.65rem; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; white-space: nowrap; }
 
   /* ── TABLE ── */
-  .table-wrap {
-    overflow-x: auto;
-    border-radius: 12px;
-    border: 1px solid var(--border);
-  }
+  .table-wrap { overflow-x: auto; border-radius: 12px; border: 1px solid var(--border); -webkit-overflow-scrolling: touch; }
 
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    min-width: 900px;
-  }
+  table { width: 100%; border-collapse: collapse; min-width: 900px; }
 
-  thead {
-    background: var(--surface2);
-    border-bottom: 2px solid var(--border);
-  }
+  thead { background: var(--surface2); border-bottom: 2px solid var(--border); }
 
   th {
     font-family: var(--mono);
@@ -381,14 +431,9 @@
 
   th.sortable { cursor: pointer; }
   th.sortable:hover { color: var(--accent); }
-
   th.num { text-align: right; }
 
-  tbody tr {
-    border-bottom: 1px solid var(--border);
-    transition: background 0.12s;
-  }
-
+  tbody tr { border-bottom: 1px solid var(--border); transition: background 0.12s; }
   tbody tr:last-child { border-bottom: none; }
   tbody tr:hover { background: var(--surface2); }
 
@@ -400,25 +445,9 @@
     vertical-align: middle;
   }
 
-  td.num {
-    text-align: right;
-    color: var(--accent2);
-    font-weight: 500;
-  }
-
-  td.grand {
-    text-align: right;
-    color: var(--accent);
-    font-weight: 500;
-    font-size: 0.85rem;
-  }
-
-  td.desc {
-    max-width: 160px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
+  td.num { text-align: right; color: var(--accent2); font-weight: 500; }
+  td.grand { text-align: right; color: var(--accent); font-weight: 500; font-size: 0.85rem; }
+  td.desc { max-width: 160px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
   .badge {
     display: inline-block;
@@ -434,7 +463,6 @@
   .badge-bus { background: rgba(240,200,96,0.15); color: #f0c860; }
   .badge-logistics { background: rgba(200,96,240,0.15); color: #c860f0; }
 
-  /* cost highlights */
   .cost-high { color: var(--danger) !important; }
   .cost-warn { color: var(--warn) !important; }
 
@@ -450,40 +478,19 @@
     gap: 0.75rem;
   }
 
-  .empty-icon {
-    font-size: 2.5rem;
-    filter: grayscale(1);
-    opacity: 0.4;
-  }
+  .empty-icon { font-size: 2.5rem; filter: grayscale(1); opacity: 0.4; }
+  .empty-title { font-size: 1rem; font-weight: 600; color: var(--muted); }
+  .empty-sub { font-family: var(--mono); font-size: 0.75rem; color: var(--border); }
 
-  .empty-title {
-    font-size: 1rem;
-    font-weight: 600;
-    color: var(--muted);
-  }
-
-  .empty-sub {
-    font-family: var(--mono);
-    font-size: 0.75rem;
-    color: var(--border);
-  }
-
-  /* ── FOOTER TOTALS ── */
-  .totals-row td {
-    background: var(--surface2);
-    border-top: 2px solid var(--border);
-    font-weight: 600;
-    color: var(--muted);
-    font-size: 0.75rem;
-  }
-
+  /* ── TOTALS ROW ── */
+  .totals-row td { background: var(--surface2); border-top: 2px solid var(--border); font-weight: 600; color: var(--muted); font-size: 0.75rem; }
   .totals-row .num { color: var(--accent2); }
   .totals-row .grand { color: var(--accent); font-size: 0.85rem; }
 
   /* ── TOAST ── */
   #toast {
     position: fixed;
-    bottom: 2rem;
+    bottom: calc(2rem + var(--safe-bottom));
     right: 2rem;
     background: var(--surface2);
     border: 1px solid var(--border);
@@ -501,12 +508,9 @@
     max-width: 280px;
   }
 
-  #toast.show {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  #toast.show { opacity: 1; transform: translateY(0); }
 
-  /* ── MODAL CONFIRM ── */
+  /* ── CONFIRM MODAL ── */
   .overlay {
     position: fixed;
     inset: 0;
@@ -533,23 +537,9 @@
     gap: 1rem;
   }
 
-  .modal-title {
-    font-size: 1.1rem;
-    font-weight: 700;
-  }
-
-  .modal-sub {
-    font-family: var(--mono);
-    font-size: 0.78rem;
-    color: var(--muted);
-    line-height: 1.6;
-  }
-
-  .modal-actions {
-    display: flex;
-    gap: 0.75rem;
-    margin-top: 0.5rem;
-  }
+  .modal-title { font-size: 1.1rem; font-weight: 700; }
+  .modal-sub { font-family: var(--mono); font-size: 0.78rem; color: var(--muted); line-height: 1.6; }
+  .modal-actions { display: flex; gap: 0.75rem; margin-top: 0.5rem; }
 
   /* ── RESPONSIVE ── */
   @media (max-width: 768px) {
@@ -570,6 +560,8 @@
     .field.wide { grid-column: span 1; }
     .form-actions { flex-direction: column; }
     .btn { width: 100%; justify-content: center; }
+    .install-actions { width: 100%; }
+    .btn-install, .btn-dismiss { flex: 1; justify-content: center; }
   }
 
   /* ── ANIMATIONS ── */
@@ -578,18 +570,33 @@
     to { opacity: 1; transform: translateY(0); }
   }
 
-  .panel { animation: fadeIn 0.3s ease both; }
-  .panel:nth-child(2) { animation-delay: 0.05s; }
-  .panel:nth-child(3) { animation-delay: 0.1s; }
-
   tbody tr { animation: fadeIn 0.2s ease both; }
 </style>
 </head>
 <body>
 
+<!-- Offline Banner -->
+<div id="offlineBanner">⚡ You're offline — all data is saved locally and fully accessible.</div>
+
+<!-- Install Banner (shown when installable) -->
+<div id="installBanner">
+  <div class="install-icon">📦</div>
+  <div class="install-text">
+    <strong>Install PurchaseLog</strong>
+    <span>Add to home screen for fast, offline access</span>
+  </div>
+  <div class="install-actions">
+    <button class="btn btn-install" onclick="installApp()">Install App</button>
+    <button class="btn btn-dismiss" onclick="dismissInstall()">Later</button>
+  </div>
+</div>
+
 <header>
   <div class="logo-block">
-    <span class="logo-tag">▸ Inventory System v1.0</span>
+    <span class="logo-tag">
+      ▸ Inventory System v1.0
+      <span class="pwa-badge">PWA</span>
+    </span>
     <h1>Purchase<span>Log</span></h1>
   </div>
   <div class="header-stats">
@@ -627,22 +634,22 @@
 
         <div class="field wide">
           <label>Item Description <span class="required">*</span></label>
-          <input type="text" id="fDesc" placeholder="e.g. Laptop Stand × Black">
+          <input type="text" id="fDesc" placeholder="e.g. Laptop Stand × Black" autocomplete="off">
         </div>
 
         <div class="field">
           <label>Quantity <span class="required">*</span></label>
-          <input type="number" id="fQty" min="0" step="1" placeholder="0" oninput="recalc()">
+          <input type="number" id="fQty" min="0" step="1" placeholder="0" inputmode="numeric" oninput="recalc()">
         </div>
 
         <div class="field">
           <label>Exchange Rate <span class="required">*</span></label>
-          <input type="number" id="fExRate" min="0" step="0.0001" placeholder="1.0000" oninput="recalc()">
+          <input type="number" id="fExRate" min="0" step="0.0001" placeholder="1.0000" inputmode="decimal" oninput="recalc()">
         </div>
 
         <div class="field">
           <label>Unit Price (Foreign) <span class="required">*</span></label>
-          <input type="number" id="fUPForeign" min="0" step="0.01" placeholder="0.00" oninput="recalc()">
+          <input type="number" id="fUPForeign" min="0" step="0.01" placeholder="0.00" inputmode="decimal" oninput="recalc()">
         </div>
 
         <div class="field">
@@ -659,12 +666,12 @@
 
         <div class="field">
           <label>Shipping Cost</label>
-          <input type="number" id="fShipping" min="0" step="0.01" placeholder="0.00" oninput="recalc()">
+          <input type="number" id="fShipping" min="0" step="0.01" placeholder="0.00" inputmode="decimal" oninput="recalc()">
         </div>
 
         <div class="field">
           <label>Miscellaneous Cost</label>
-          <input type="number" id="fMisc" min="0" step="0.01" placeholder="0.00" oninput="recalc()">
+          <input type="number" id="fMisc" min="0" step="0.01" placeholder="0.00" inputmode="decimal" oninput="recalc()">
         </div>
 
         <div class="field">
@@ -706,7 +713,7 @@
       <div class="controls">
         <div class="search-wrap">
           <span class="search-icon">⌕</span>
-          <input type="text" id="searchInput" placeholder="Search by description or date…" oninput="renderTable()">
+          <input type="search" id="searchInput" placeholder="Search by description or date…" oninput="renderTable()">
         </div>
         <div class="sort-wrap">
           <span class="sort-label">Sort:</span>
@@ -751,8 +758,7 @@
               <th>Actions</th>
             </tr>
           </thead>
-          <tbody id="tableBody">
-          </tbody>
+          <tbody id="tableBody"></tbody>
           <tfoot id="tableFooter"></tfoot>
         </table>
         <div id="emptyState" class="empty-state" style="display:none;">
@@ -778,13 +784,23 @@
   </div>
 </div>
 
+<!-- Update Available Banner -->
+<div id="updateBanner">
+  <span>🔄 Update available</span>
+  <button class="btn btn-primary btn-sm" onclick="applyUpdate()">Reload</button>
+  <button class="btn btn-secondary btn-sm" onclick="$('updateBanner').classList.remove('visible')">Later</button>
+</div>
+
 <div id="toast"></div>
 
 <script>
+  // ── STORAGE & STATE ──
   const STORAGE_KEY = 'purchaselog_records';
   let records = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
   let editingId = null;
   let deleteTargetId = null;
+  let deferredInstallPrompt = null;
+  let newWorker = null;
 
   // ── UTILS ──
   const $ = id => document.getElementById(id);
@@ -798,11 +814,110 @@
   function toast(msg, type='ok') {
     const el = $('toast');
     el.textContent = msg;
-    el.style.borderLeftColor = type === 'err' ? 'var(--danger)' : 'var(--accent)';
+    el.style.borderLeftColor = type === 'err' ? 'var(--danger)' : type === 'warn' ? 'var(--warn)' : 'var(--accent)';
     el.classList.add('show');
     clearTimeout(toast._t);
     toast._t = setTimeout(() => el.classList.remove('show'), 2800);
   }
+
+  // ── SERVICE WORKER REGISTRATION ──
+  // SW only works when the file is served from your own origin (e.g. GitHub Pages).
+  // It is silently skipped when opened as a local file, inside an iframe preview,
+  // or on a cross-origin host — the app continues to work fully in all cases.
+  (function registerSW() {
+    if (!('serviceWorker' in navigator)) return;
+
+    // Skip if we're inside a cross-origin iframe (e.g. preview environments)
+    try {
+      if (window.self !== window.top) return;
+    } catch(e) { return; }
+
+    // Skip if served as a local file (file:// protocol)
+    if (location.protocol === 'file:') return;
+
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./sw.js')
+        .then(reg => {
+          console.log('[PWA] Service Worker registered:', reg.scope);
+
+          reg.addEventListener('updatefound', () => {
+            newWorker = reg.installing;
+            newWorker.addEventListener('statechange', () => {
+              if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                $('updateBanner').classList.add('visible');
+              }
+            });
+          });
+        })
+        .catch(() => {
+          // Silently ignore — SW unavailable in this environment
+        });
+
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        window.location.reload();
+      });
+    });
+  })();
+
+  // ── APPLY SW UPDATE ──
+  function applyUpdate() {
+    if (newWorker) {
+      newWorker.postMessage({ type: 'SKIP_WAITING' });
+    }
+    $('updateBanner').classList.remove('visible');
+  }
+
+  // ── INSTALL PROMPT ──
+  window.addEventListener('beforeinstallprompt', e => {
+    e.preventDefault();
+    deferredInstallPrompt = e;
+    const dismissed = localStorage.getItem('installDismissed');
+    if (!dismissed) {
+      $('installBanner').classList.add('visible');
+    }
+  });
+
+  window.addEventListener('appinstalled', () => {
+    $('installBanner').classList.remove('visible');
+    deferredInstallPrompt = null;
+    toast('✓ PurchaseLog installed successfully!');
+  });
+
+  function installApp() {
+    if (!deferredInstallPrompt) return;
+    deferredInstallPrompt.prompt();
+    deferredInstallPrompt.userChoice.then(choice => {
+      if (choice.outcome === 'accepted') {
+        toast('Installing PurchaseLog…');
+      }
+      deferredInstallPrompt = null;
+      $('installBanner').classList.remove('visible');
+    });
+  }
+
+  function dismissInstall() {
+    $('installBanner').classList.remove('visible');
+    localStorage.setItem('installDismissed', '1');
+  }
+
+  // ── ONLINE / OFFLINE STATUS ──
+  function updateOnlineStatus() {
+    if (!navigator.onLine) {
+      $('offlineBanner').classList.add('visible');
+    } else {
+      $('offlineBanner').classList.remove('visible');
+    }
+  }
+
+  window.addEventListener('online', () => {
+    updateOnlineStatus();
+    toast('Back online.');
+  });
+
+  window.addEventListener('offline', () => {
+    updateOnlineStatus();
+    toast('You are offline. Data is saved locally.', 'warn');
+  });
 
   // ── PANEL TOGGLE ──
   function togglePanel() {
@@ -812,7 +927,7 @@
     tog.classList.toggle('open', open);
   }
 
-  // ── RECALC ──
+  // ── AUTO RECALCULATE ──
   function recalc() {
     const qty = +$('fQty').value || 0;
     const exRate = +$('fExRate').value || 0;
@@ -829,7 +944,7 @@
     $('fGrandTotal').value = grandTotal ? grandTotal.toFixed(2) : '';
   }
 
-  // ── SAVE ──
+  // ── SAVE RECORD ──
   function saveRecord() {
     const date = $('fDate').value;
     const desc = $('fDesc').value.trim();
@@ -845,7 +960,7 @@
     if (!desc) { toast('Please enter item description.', 'err'); return; }
     if (!qty || qty <= 0) { toast('Quantity must be greater than 0.', 'err'); return; }
     if (!exRate || exRate <= 0) { toast('Exchange rate must be greater than 0.', 'err'); return; }
-    if (!upForeign || upForeign < 0) { toast('Unit price (foreign) is required.', 'err'); return; }
+    if (upForeign < 0 || isNaN(upForeign)) { toast('Unit price (foreign) is required.', 'err'); return; }
 
     const upLocal = upForeign * exRate;
     const subtotal = qty * upLocal;
@@ -872,16 +987,18 @@
     updateStats();
   }
 
-  // ── RESET ──
+  // ── RESET FORM ──
   function resetForm() {
-    ['fDate','fDesc','fQty','fExRate','fUPForeign','fUPLocal','fSubtotal','fShipping','fMisc','fGrandTotal','fArrival'].forEach(id => $( id).value = '');
+    ['fDate','fDesc','fQty','fExRate','fUPForeign','fUPLocal','fSubtotal','fShipping','fMisc','fGrandTotal','fArrival'].forEach(id => $(id).value = '');
     $('fShipMethod').value = '';
     editingId = null;
     $('btnLabel').textContent = '＋ Add Record';
     $('formTitle').textContent = 'Add New Record';
+    // Re-set today's date
+    $('fDate').value = new Date().toISOString().slice(0,10);
   }
 
-  // ── EDIT ──
+  // ── EDIT RECORD ──
   function editRecord(id) {
     const rec = records.find(r => r.id === id);
     if (!rec) return;
@@ -901,7 +1018,6 @@
     $('btnLabel').textContent = '✓ Update Record';
     $('formTitle').textContent = 'Editing Record';
 
-    // open panel
     const body = $('formBody');
     const tog = $('panelToggle');
     if (!body.classList.contains('open')) {
@@ -911,7 +1027,7 @@
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
-  // ── DELETE ──
+  // ── DELETE RECORD ──
   function askDelete(id) {
     deleteTargetId = id;
     $('deleteOverlay').classList.add('open');
@@ -931,7 +1047,7 @@
     deleteTargetId = null;
   }
 
-  // ── RENDER ──
+  // ── RENDER TABLE ──
   function getFiltered() {
     const q = $('searchInput').value.toLowerCase().trim();
     let list = q ? records.filter(r => r.desc.toLowerCase().includes(q) || r.date.includes(q)) : [...records];
@@ -1001,7 +1117,6 @@
       </tr>`;
     }).join('');
 
-    // totals row
     const totSub = list.reduce((a,r)=>a+r.subtotal,0);
     const totShip = list.reduce((a,r)=>a+r.shipping,0);
     const totMisc = list.reduce((a,r)=>a+r.misc,0);
@@ -1054,17 +1169,16 @@
     toast(`Exported ${list.length} records.`);
   }
 
-  // ── CLOSE MODAL ON OVERLAY CLICK ──
+  // ── EVENT LISTENERS ──
   $('deleteOverlay').addEventListener('click', e => {
     if (e.target === $('deleteOverlay')) closeModal();
   });
 
   // ── INIT ──
+  updateOnlineStatus();
   renderTable();
   updateStats();
-  // Set today's date as default
-  const today = new Date().toISOString().slice(0,10);
-  $('fDate').value = today;
+  $('fDate').value = new Date().toISOString().slice(0,10);
 </script>
 </body>
 </html>
